@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {MRC15Adapter} from "../base/MRC15Adapter.sol";
-import {SafeTransferLib} from "../libraries/SafeTransferLib.sol";
 
 interface ICloberWrappedNative {
     function deposit() external payable;
@@ -70,7 +71,7 @@ interface ICloberController {
 }
 
 contract CloberAdapter is MRC15Adapter {
-    using SafeTransferLib for address;
+    using SafeERC20 for IERC20;
 
     error IncompleteFill();
     error InvalidBook();
@@ -168,12 +169,12 @@ contract CloberAdapter is MRC15Adapter {
     ) internal override returns (uint256 amountOut) {
         if (swapData.length != 0) revert UnexpectedData();
 
-        address inputToken = token0ForToken1 ? token0 : token1;
-        address outputToken = token0ForToken1 ? token1 : token0;
+        IERC20 inputToken = IERC20(token0ForToken1 ? token0 : token1);
+        IERC20 outputToken = IERC20(token0ForToken1 ? token1 : token0);
         address inputCurrency = token0ForToken1 ? currency0 : currency1;
         address outputCurrency = token0ForToken1 ? currency1 : currency0;
         uint192 bookId = token0ForToken1 ? bookId0For1 : bookId1For0;
-        uint256 outputBalanceBefore = outputToken.safeBalanceOf(address(this));
+        uint256 outputBalanceBefore = outputToken.balanceOf(address(this));
         uint256 nativeBalanceBefore = address(this).balance;
         uint256 callValue;
 
@@ -196,11 +197,11 @@ contract CloberAdapter is MRC15Adapter {
         if (inputCurrency != address(0)) inputToken.forceApprove(controller, 0);
 
         _wrapNativeDelta(nativeBalanceBefore);
-        uint256 outputBalanceAfter = outputToken.safeBalanceOf(address(this));
+        uint256 outputBalanceAfter = outputToken.balanceOf(address(this));
         if (outputBalanceAfter < outputBalanceBefore) revert InvalidExecution();
         amountOut = outputBalanceAfter - outputBalanceBefore;
         if (amountOut == 0) revert InvalidExecution();
-        _deliver(outputToken, to, amountOut);
+        _deliver(address(outputToken), to, amountOut);
     }
 
     function _tokensToSettle(address inputCurrency, address outputCurrency)

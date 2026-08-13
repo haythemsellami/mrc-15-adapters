@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {MRC15Adapter} from "../base/MRC15Adapter.sol";
 import {FullMath} from "../libraries/FullMath.sol";
-import {SafeTransferLib} from "../libraries/SafeTransferLib.sol";
 
 /// @notice Current configuration returned by a Hanji central-limit-order-book market.
 struct HanjiMarketConfig {
@@ -75,7 +76,7 @@ interface IHanjiWrappedNative {
 ///      the helper ladder is not always an executable preview, integrations must simulate the complete router call.
 ///      Every successful execution still satisfies MRC-15 exact-input settlement.
 contract HanjiAdapter is MRC15Adapter {
-    using SafeTransferLib for address;
+    using SafeERC20 for IERC20;
 
     uint256 private constant COMMISSION_SCALE = 1e18;
     uint72 private constant MIN_PRICE = 1;
@@ -175,10 +176,10 @@ contract HanjiAdapter is MRC15Adapter {
         if (swapData.length != 0) revert UnexpectedData();
         _validateCurrentConfig();
 
-        address inputToken = token0ForToken1 ? token0 : token1;
-        address outputToken = token0ForToken1 ? token1 : token0;
-        uint256 inputBalanceBefore = inputToken.safeBalanceOf(address(this));
-        uint256 outputBalanceBefore = outputToken.safeBalanceOf(address(this));
+        IERC20 inputToken = IERC20(token0ForToken1 ? token0 : token1);
+        IERC20 outputToken = IERC20(token0ForToken1 ? token1 : token0);
+        uint256 inputBalanceBefore = inputToken.balanceOf(address(this));
+        uint256 outputBalanceBefore = outputToken.balanceOf(address(this));
         uint256 nativeBalanceBefore = address(this).balance;
 
         inputToken.forceApprove(market, amountIn);
@@ -193,17 +194,17 @@ contract HanjiAdapter is MRC15Adapter {
         }
         inputToken.forceApprove(market, 0);
 
-        _wrapNativeDelta(nativeBalanceBefore, outputToken);
+        _wrapNativeDelta(nativeBalanceBefore, address(outputToken));
 
-        uint256 inputBalanceAfter = inputToken.safeBalanceOf(address(this));
+        uint256 inputBalanceAfter = inputToken.balanceOf(address(this));
         if (inputBalanceAfter > inputBalanceBefore || inputBalanceBefore - inputBalanceAfter != amountIn) {
             revert IncompleteInputConsumption();
         }
 
-        uint256 outputBalanceAfter = outputToken.safeBalanceOf(address(this));
+        uint256 outputBalanceAfter = outputToken.balanceOf(address(this));
         if (outputBalanceAfter <= outputBalanceBefore) revert InvalidExecution();
         amountOut = outputBalanceAfter - outputBalanceBefore;
-        _deliver(outputToken, to, amountOut);
+        _deliver(address(outputToken), to, amountOut);
     }
 
     function _quoteTokenXForTokenY(uint256 amountIn, uint256 feeRate, uint72[] memory prices, uint128[] memory shares)

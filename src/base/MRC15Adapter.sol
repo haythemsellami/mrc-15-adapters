@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IPropAMMRouter} from "../interfaces/IPropAMMRouter.sol";
-import {SafeTransferLib} from "../libraries/SafeTransferLib.sol";
 
 abstract contract MRC15Adapter is IPropAMMRouter {
-    using SafeTransferLib for address;
+    using SafeERC20 for IERC20;
 
     error DeadlineExpired();
     error InvalidAmountIn();
@@ -48,16 +49,16 @@ abstract contract MRC15Adapter is IPropAMMRouter {
         if (amountIn == 0) revert InvalidAmountIn();
         if (block.timestamp > deadline) revert DeadlineExpired();
 
-        address inputToken = token0ForToken1 ? token0 : token1;
-        address outputToken = token0ForToken1 ? token1 : token0;
-        uint256 recipientBalanceBefore = outputToken.safeBalanceOf(to);
+        IERC20 inputToken = IERC20(token0ForToken1 ? token0 : token1);
+        IERC20 outputToken = IERC20(token0ForToken1 ? token1 : token0);
+        uint256 recipientBalanceBefore = outputToken.balanceOf(to);
 
         inputToken.safeTransferFrom(msg.sender, address(this), amountIn);
 
         uint256 expectedAmountOut = _executeSwap(token0ForToken1, amountIn, amountOutMin, to, deadline, swapData);
         if (expectedAmountOut < amountOutMin) revert SlippageExceeded();
 
-        uint256 recipientBalanceAfter = outputToken.safeBalanceOf(to);
+        uint256 recipientBalanceAfter = outputToken.balanceOf(to);
         amountOut = recipientBalanceAfter - recipientBalanceBefore;
         if (amountOut != expectedAmountOut) revert OutputBalanceMismatch();
 
@@ -65,7 +66,7 @@ abstract contract MRC15Adapter is IPropAMMRouter {
     }
 
     function _deliver(address outputToken, address to, uint256 amount) internal {
-        outputToken.safeTransfer(to, amount);
+        IERC20(outputToken).safeTransfer(to, amount);
     }
 
     function _executeSwap(

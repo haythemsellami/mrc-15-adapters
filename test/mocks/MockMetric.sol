@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {
     IMetricLegacyPool,
     IMetricLegacyPriceProvider,
     IMetricLegacyRouter,
     MetricPoolImmutables
 } from "../../src/adapters/MetricAdapter.sol";
-import {SafeTransferLib} from "../../src/libraries/SafeTransferLib.sol";
 
 contract MockMetricPool is IMetricLegacyPool {
     MetricPoolImmutables private _poolImmutables;
@@ -39,7 +40,7 @@ contract MockMetricPriceProvider is IMetricLegacyPriceProvider {
 }
 
 contract MockMetricRouter is IMetricLegacyRouter {
-    using SafeTransferLib for address;
+    using SafeERC20 for IERC20;
 
     int128 public quoteAmount0Delta;
     int128 public quoteAmount1Delta;
@@ -106,8 +107,8 @@ contract MockMetricRouter is IMetricLegacyRouter {
         lastDeadline = deadline;
 
         MetricPoolImmutables memory poolImmutables = IMetricLegacyPool(pool).getImmutables();
-        address inputToken = zeroForOne ? poolImmutables.token0 : poolImmutables.token1;
-        address outputToken = zeroForOne ? poolImmutables.token1 : poolImmutables.token0;
+        IERC20 inputToken = IERC20(zeroForOne ? poolImmutables.token0 : poolImmutables.token1);
+        IERC20 outputToken = IERC20(zeroForOne ? poolImmutables.token1 : poolImmutables.token0);
         inputToken.safeTransferFrom(msg.sender, address(this), swapPullAmount);
         outputToken.safeTransfer(recipient, swapTransferAmount);
 

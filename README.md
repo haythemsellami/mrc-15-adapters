@@ -2,16 +2,13 @@
 
 Solidity adapters for integrating Monad proprietary AMMs through the MRC-15 exact-input interface.
 
-The repository ships four venue adapters:
+The repository ships five venue adapters:
 
 - `PoeAdapter`: LFJ POE oracle-pool markets.
 - `CloberAdapter`: Clober V2 mirror-book markets, including native MON books normalized to WMON.
 - `MetricAdapter`: legacy Metric OMM pools using rollback-isolated non-view quoting.
 - `HanjiAdapter`: Hanji order-book markets using helper ladders and exact-execution checks.
-
-Lunarbase is not shipped because its deployed execution path remains caller-whitelisted and its production execution
-interface is not sufficiently documented. See [the compatibility report](docs/compatibility.md) for venue-specific
-status and caveats.
+- `ThogAdapter`: ThogAMM inventory-backed maker markets with rotating pool discovery.
 
 ## MRC-15 behavior
 
@@ -25,10 +22,10 @@ Each adapter represents one fixed ERC-20 pair and implements `IPropAMMRouter`:
 - the returned output equals the recipient's observable ERC-20 balance increase; and
 - every successful swap emits `PropAMMSwap` with the immediate caller, recipient, direction, input, and actual output.
 
-Poe, Clober, and Hanji currently use static-compatible quote paths, but integrations must not depend on that. Metric's
-legacy quote path changes state and fails under `STATICCALL`; it works through the standard rollback-isolated ordinary
-call flow. The ABI selector does not encode mutability, so view implementations remain compatible with the non-view
-interface.
+Poe, Clober, Hanji, and ThogAMM currently use static-compatible quote paths, but integrations must not depend on that.
+Metric's legacy quote path changes state and fails under `STATICCALL`; it works through the standard rollback-isolated
+ordinary call flow. The ABI selector does not encode mutability, so view implementations remain compatible with the
+non-view interface.
 
 Before calling `swap`, the caller must approve the selected adapter for at least the exact input amount. Exact-amount
 approvals are recommended.
@@ -87,6 +84,18 @@ Every successful swap still satisfies exact-input settlement, but a winning quot
 market materializes different liquidity. Builders must simulate the complete intended router swap and remove a Hanji
 winner if that simulation fails before selecting again.
 
+### ThogAMM
+
+| Deployment input | Monad address |
+| --- | --- |
+| ThogAMM proxy | `0x80c74517BCC2D67fFE02D3ED886796272F647210` |
+| Validated pair | WMON / USDC |
+
+`ThogAdapter` validates ThogAMM's single rotating ERC-7815 pool and binds one immutable token pair. It accepts only
+nonzero, nonfuture maker quotes, grants an exact temporary input allowance, verifies complete input consumption, and
+clears the venue allowance after execution. The venue is an upgradeable proxy, so every implementation change needs
+fresh compatibility and fork-test evidence.
+
 ## Token addresses
 
 | Token | Monad address |
@@ -105,9 +114,9 @@ MONAD_RPC_URL=https://rpc.monad.xyz forge test --match-path 'test/e2e/*'
 MONAD_ARCHIVE_RPC_URL="YOUR_ARCHIVE_RPC_URL" forge test --match-test test_exactBoundaryQuoteExecutes
 ```
 
-The fork suite validates Poe, Clober, and Metric at Monad block `90,990,000`. Hanji controls cover a known exact
-execution boundary at block `88,161,153` and a known quote/execution divergence at block `90,990,000`. The historical
-exact-boundary control requires an archive-capable RPC.
+The fork suite validates Poe, Clober, Metric, and ThogAMM at Monad block `90,990,000`. Hanji controls cover a known
+exact execution boundary at block `88,161,153` and a known quote/execution divergence at block `90,990,000`.
+ThogAMM's pinned exact swaps and Hanji's historical exact-boundary control require an archive-capable RPC.
 
 The contracts have not been audited. Treat the repository as integration code under active development until an
 independent security review and pinned deployment process are complete.

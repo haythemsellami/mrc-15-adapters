@@ -8,7 +8,7 @@ contract MockERC20 {
     uint256 public totalSupply;
 
     mapping(address => uint256) public balanceOf;
-    mapping(address => mapping(address => uint256)) public allowance;
+    mapping(address => mapping(address => uint256)) internal _allowance;
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
@@ -25,8 +25,12 @@ contract MockERC20 {
         emit Transfer(address(0), to, amount);
     }
 
-    function approve(address spender, uint256 amount) external returns (bool) {
-        allowance[msg.sender][spender] = amount;
+    function allowance(address owner, address spender) public view virtual returns (uint256) {
+        return _allowance[owner][spender];
+    }
+
+    function approve(address spender, uint256 amount) public virtual returns (bool) {
+        _allowance[msg.sender][spender] = amount;
         emit Approval(msg.sender, spender, amount);
         return true;
     }
@@ -37,10 +41,10 @@ contract MockERC20 {
     }
 
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
-        uint256 allowed = allowance[from][msg.sender];
+        uint256 allowed = _allowance[from][msg.sender];
         if (allowed != type(uint256).max) {
             require(allowed >= amount, "ALLOWANCE");
-            allowance[from][msg.sender] = allowed - amount;
+            _allowance[from][msg.sender] = allowed - amount;
         }
         _transfer(from, to, amount);
         return true;

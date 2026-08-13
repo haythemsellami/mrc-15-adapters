@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {MRC15Adapter} from "../base/MRC15Adapter.sol";
-import {SafeTransferLib} from "../libraries/SafeTransferLib.sol";
 
 /// @notice Immutable configuration returned by a legacy Metric OMM pool.
 struct MetricPoolImmutables {
@@ -61,7 +62,7 @@ interface IMetricLegacyRouter {
 /// @title Metric legacy MRC-15 adapter
 /// @notice Adapts one legacy Metric OMM pool to the MRC-15 exact-input interface.
 contract MetricAdapter is MRC15Adapter {
-    using SafeTransferLib for address;
+    using SafeERC20 for IERC20;
 
     uint128 private constant MIN_PRICE_LIMIT_X64 = 1;
     uint128 private constant MAX_PRICE_LIMIT_X64 = type(uint128).max;
@@ -140,7 +141,7 @@ contract MetricAdapter is MRC15Adapter {
         if (swapData.length != 0) revert UnexpectedSwapData();
         if (amountIn > MAX_QUOTE_AMOUNT) revert SwapAmountOverflow();
 
-        address inputToken = token0ForToken1 ? token0 : token1;
+        IERC20 inputToken = IERC20(token0ForToken1 ? token0 : token1);
         inputToken.forceApprove(router, amountIn);
 
         uint256 amountInUsed;

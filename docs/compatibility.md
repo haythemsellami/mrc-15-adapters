@@ -12,12 +12,11 @@ revalidated against Monad mainnet block `90,990,000`; Hanji exact-execution cont
 | Clober V2 | Static-compatible BookViewer | Supported when the complete requested base amount is executable | Supported |
 | Metric legacy | State-changing legacy router quote | Router pulls exact input | Supported through rollback-isolated non-view quoting |
 | Hanji | Static-compatible helper ladder | Proxy execution with exact-input verification | Operational exception requiring complete-swap simulation and winner pruning |
-| Lunarbase | View pool quotes | Deployed execution path is caller-whitelisted | Blocked |
+| ThogAMM | Static-compatible maker quote | Maker pulls exact input and credits the recipient | Supported with per-implementation revalidation |
 
-An unsupported venue is intentionally not represented by a contract that merely implements the ABI. A conforming
-adapter must also satisfy MRC-15's exact-input funding, executable-quote, and recipient-settlement requirements. Hanji
-is the explicitly documented exception: it is usable with a simulation-gated builder flow but is not claimed to
-satisfy strict same-state quote fidelity.
+A conforming adapter must satisfy MRC-15's exact-input funding, executable-quote, and recipient-settlement
+requirements. Hanji is the explicitly documented exception: it is usable with a simulation-gated builder flow but is
+not claimed to satisfy strict same-state quote fidelity.
 
 ## LFJ POE
 
@@ -89,11 +88,31 @@ The repository's pinned fork controls currently cover WMON/USDC.
 | FastQuoterHelper | `0x237dB58fea34A35A8543b44C217d221606cE7788` |
 | Recommended maximum price levels | `60` |
 
-## Lunarbase blocker
+## ThogAMM
 
-The MON/USDC pool exposes view quote functions, but its deployed execution path is caller-whitelisted. A newly
-deployed permissionless adapter is not currently authorized to execute, and the production execution ABI and native
-settlement semantics are not sufficiently published to validate a conforming implementation.
+`ThogAdapter` binds one immutable token pair to ThogAMM's inventory-funded maker proxy. The constructor requires the
+proxy to expose exactly one ERC-7815 pool ID and a unique, nonzero token registry containing both configured tokens.
+It intentionally does not store the pool ID because the venue can rotate that identifier while retaining the same
+proxy and token registry.
 
-Support requires a verified execution interface, authorization for the adapter deployment, and documented rules for
-fee selection and native-MON settlement.
+Quotes call `makerQuoteExactInput(tokenIn, tokenOut, amountIn)`, reject zero output, and require a nonzero posted block
+no greater than the current block. Quote and swap data must both be empty. Execution grants the proxy an allowance of
+exactly `amountIn`, calls
+`makerSwapExactInput(tokenIn, tokenOut, amountIn, amountOutMin, recipient, block.number)`, clears and verifies the
+allowance, and proves the venue consumed exactly the newly received input without touching a preexisting adapter
+balance. ThogAMM sends output directly to the MRC-15 recipient, so the shared base also checks the actual recipient
+balance delta against the venue's reported output. MRC-15's user deadline remains timestamp-based and is enforced by
+the base before the venue receives its block-number deadline.
+
+| Deployment input | Monad address |
+| --- | --- |
+| ThogAMM proxy | `0x80c74517BCC2D67fFE02D3ED886796272F647210` |
+| WMON | `0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A` |
+| USDC | `0x754704Bc059F8C67012fEd69BC8A327a5aafb603` |
+
+The pinned fork evidence at block `90,990,000` is tied to implementation
+`0x127a5B18e3e96fc104F5eAF280dfe502dd3fD40A`, whose runtime code hash is
+`0x432d64d0d143d454afe9586a9708f431f4131523e9b5dc34ca1c7cc683715393`. It verifies static discovery, quotes, and
+exact swaps in both WMON/USDC directions. The adapter intentionally integrates the upgradeable proxy rather than
+pinning its ERC-1967 implementation. A proxy upgrade can therefore change execution semantics without changing the
+venue or adapter address, and each implementation requires fresh compatibility evidence.

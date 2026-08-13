@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {MRC15Adapter} from "../base/MRC15Adapter.sol";
-import {SafeTransferLib} from "../libraries/SafeTransferLib.sol";
 import {SignedDeltaMath} from "../libraries/SignedDeltaMath.sol";
 
 interface IPoePool {
@@ -13,7 +14,7 @@ interface IPoePool {
 }
 
 contract PoeAdapter is MRC15Adapter {
-    using SafeTransferLib for address;
+    using SafeERC20 for IERC20;
 
     error CallbackNotCompleted();
     error InvalidCallback();
@@ -72,7 +73,7 @@ contract PoeAdapter is MRC15Adapter {
 
         _callbackCompleted = true;
         _callbackAmount = 0;
-        expectedToken.safeTransfer(pool, uint256(inputDelta));
+        IERC20(expectedToken).safeTransfer(pool, uint256(inputDelta));
         return this.swapCallback.selector;
     }
 
