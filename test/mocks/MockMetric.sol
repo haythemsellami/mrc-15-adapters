@@ -1,0 +1,125 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {
+    IMetricLegacyPool,
+    IMetricLegacyPriceProvider,
+    IMetricLegacyRouter,
+    MetricPoolImmutables
+} from "../../src/adapters/MetricAdapter.sol";
+import {SafeTransferLib} from "../../src/libraries/SafeTransferLib.sol";
+
+contract MockMetricPool is IMetricLegacyPool {
+    MetricPoolImmutables private _poolImmutables;
+
+    constructor(address priceProvider_, address token0_, address token1_) {
+        _poolImmutables.factory = address(this);
+        _poolImmutables.priceProvider = priceProvider_;
+        _poolImmutables.token0 = token0_;
+        _poolImmutables.token1 = token1_;
+    }
+
+    function getImmutables() external view returns (MetricPoolImmutables memory poolImmutables) {
+        return _poolImmutables;
+    }
+}
+
+contract MockMetricPriceProvider is IMetricLegacyPriceProvider {
+    uint128 public bidPriceX64;
+    uint128 public askPriceX64;
+
+    constructor(uint128 bidPriceX64_, uint128 askPriceX64_) {
+        bidPriceX64 = bidPriceX64_;
+        askPriceX64 = askPriceX64_;
+    }
+
+    function getBidAndAskPrice() external view returns (uint128, uint128) {
+        return (bidPriceX64, askPriceX64);
+    }
+}
+
+contract MockMetricRouter is IMetricLegacyRouter {
+    using SafeTransferLib for address;
+
+    int128 public quoteAmount0Delta;
+    int128 public quoteAmount1Delta;
+    uint256 public swapAmountOut;
+    uint256 public swapAmountInUsed;
+    uint256 public swapPullAmount;
+    uint256 public swapTransferAmount;
+
+    uint256 public quoteCalls;
+    address public lastPool;
+    address public lastRecipient;
+    bool public lastZeroForOne;
+    uint128 public lastPriceLimitX64;
+    uint128 public lastBidPriceX64;
+    uint128 public lastAskPriceX64;
+    uint256 public lastAmountOutMin;
+    uint256 public lastDeadline;
+
+    function configureQuote(int128 amount0Delta_, int128 amount1Delta_) external {
+        quoteAmount0Delta = amount0Delta_;
+        quoteAmount1Delta = amount1Delta_;
+    }
+
+    function configureSwap(uint256 amountOut_, uint256 amountInUsed_, uint256 pullAmount_, uint256 transferAmount_)
+        external
+    {
+        swapAmountOut = amountOut_;
+        swapAmountInUsed = amountInUsed_;
+        swapPullAmount = pullAmount_;
+        swapTransferAmount = transferAmount_;
+    }
+
+    function quoteSwap(
+        address pool,
+        bool zeroForOne,
+        int128,
+        uint128 priceLimitX64,
+        uint128 bidPriceX64,
+        uint128 askPriceX64
+    ) external returns (int128 amount0Delta, int128 amount1Delta) {
+        ++quoteCalls;
+        lastPool = pool;
+        lastZeroForOne = zeroForOne;
+        lastPriceLimitX64 = priceLimitX64;
+        lastBidPriceX64 = bidPriceX64;
+        lastAskPriceX64 = askPriceX64;
+        return (quoteAmount0Delta, quoteAmount1Delta);
+    }
+
+    function swapExactInput(
+        address pool,
+        address recipient,
+        bool zeroForOne,
+        uint128,
+        uint128 priceLimitX64,
+        uint256 amountOutMin,
+        uint256 deadline
+    ) external payable returns (uint256 amountOut, uint256 amountInUsed) {
+        lastPool = pool;
+        lastRecipient = recipient;
+        lastZeroForOne = zeroForOne;
+        lastPriceLimitX64 = priceLimitX64;
+        lastAmountOutMin = amountOutMin;
+        lastDeadline = deadline;
+
+        MetricPoolImmutables memory poolImmutables = IMetricLegacyPool(pool).getImmutables();
+        address inputToken = zeroForOne ? poolImmutables.token0 : poolImmutables.token1;
+        address outputToken = zeroForOne ? poolImmutables.token1 : poolImmutables.token0;
+        inputToken.safeTransferFrom(msg.sender, address(this), swapPullAmount);
+        outputToken.safeTransfer(recipient, swapTransferAmount);
+
+        return (swapAmountOut, swapAmountInUsed);
+    }
+}
+
+contract MockMalformedMetricPool {
+    fallback() external {
+        assembly ("memory-safe") {
+            mstore(0, 1)
+            return(0, 32)
+        }
+    }
+}
